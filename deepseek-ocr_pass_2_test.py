@@ -1,6 +1,7 @@
-# deepseek-ocr_pass_2.py
+# deepseek-ocr_pass_2.py (TEST VERSION)
 # Pass 2: Uses Ollama deepseek-ocr to re-OCR only "complex" tables
 # identified in pass 1, and patches them into the Docling markdown + HTML.
+# This version includes enhanced timeout protection and debugging
 
 import base64
 import io
@@ -138,13 +139,13 @@ def extract_markdown_tables(text: str) -> List[str]:
             current.append(line.rstrip())
         else:
             if current and is_valid_markdown_table_block(current):
-                tables.append("\n".join(current).strip())
+                tables.append("\\n".join(current).strip())
                 current = []
             else:
                 current = []
 
     if current and is_valid_markdown_table_block(current):
-        tables.append("\n".join(current).strip())
+        tables.append("\\n".join(current).strip())
 
     return tables
 
@@ -231,12 +232,12 @@ def main() -> None:
     print("=== PASS 2: DEEPSEEK OCR ON COMPLEX TABLES ===")
     print(f"PDF_PATH: {pdf_path}")
     print(f"Output directory: {out_dir}")
-    print(f"Expecting complex table metadata at: {complex_json_path}\n")
+    print(f"Expecting complex table metadata at: {complex_json_path}\\n")
 
     if not raw_md_path.exists() or not raw_html_path.exists():
         raise SystemExit(
-            "Raw Docling outputs not found.\n"
-            f"Expected:\n {raw_md_path}\n {raw_html_path}\n"
+            "Raw Docling outputs not found.\\n"
+            f"Expected:\\n {raw_md_path}\\n {raw_html_path}\\n"
             "Run docling_pass_1.py first."
         )
 
@@ -264,7 +265,7 @@ def main() -> None:
 
     print(f"Converting PDF '{pdf_path}' to images...")
     pages = convert_from_path(str(pdf_path), dpi=200)
-    print(f"Converted {len(pages)} pages.\n")
+    print(f"Converted {len(pages)} pages.\\n")
 
     for idx, tbl in enumerate(complex_tables, start=1):
         page_index = tbl.get("page_index")
@@ -282,7 +283,7 @@ def main() -> None:
 
         # Start timer for this table
         table_start_time = time.time()
-        max_table_time = 180  # Maximum time per table in seconds (3 minutes)
+        max_table_time = 180  # Maximum time per table in seconds (3 minutes) - reduced for testing
 
         prompts = [
             (
@@ -315,7 +316,9 @@ No explanations. No extra text.
                 break
                 
             try:
-                resp_json = ollama_generate(page_image, prompt, timeout=120)  # Use full page with timeout
+                print(f"  Calling Ollama with {label} prompt...")
+                resp_json = ollama_generate(page_image, prompt, timeout=90)  # Use full page with timeout
+                print(f"  Ollama response received in {time.time() - (time.time() - 90 if 'start_time' in locals() else time.time()):.2f}s")
             except Exception as exc:
                 print(f" Error ({label}, full page): {exc}")
                 continue
@@ -327,7 +330,7 @@ No explanations. No extra text.
 
             tables = extract_markdown_tables(text)
             if not tables:
-                snippet = text.replace("\n", " ")[:200]
+                snippet = text.replace("\\n", " ")[:200]
                 print(f" No tables found ({label}, full page): {snippet!r}")
                 continue
 
@@ -341,7 +344,7 @@ No explanations. No extra text.
                 best_full_page_result = new_table_md
                 print(f" Found likely complete table from full page using {label}")
                 # If it's a really good result (same or better dimensions), use it immediately
-                if table_shape(new_table_md)[0] >= table_shape(orig_md)[0] and \
+                if table_shape(new_table_md)[0] >= table_shape(orig_md)[0] and \\
                    table_shape(new_table_md)[1] >= table_shape(orig_md)[1]:
                     print(f"  Good result found, moving to next table")
                     break
@@ -385,7 +388,7 @@ No explanations. No extra text.
         else:
             # If full page didn't work well, try cropped versions
             # Limit the number of crop attempts to avoid getting stuck
-            max_crop_attempts = 3  # Limit to first 3 crop attempts
+            max_crop_attempts = 3  # Limit to first 3 crop attempts - reduced for testing
             crop_attempts = 0
             for variant_label, variant_image in image_variants:
                 if variant_label == "full page":
@@ -406,7 +409,9 @@ No explanations. No extra text.
                         break
                         
                     try:
-                        resp_json = ollama_generate(variant_image, prompt, timeout=120)
+                        print(f"  Calling Ollama with {label} prompt on {variant_label}...")
+                        resp_json = ollama_generate(variant_image, prompt, timeout=90)
+                        print(f"  Ollama response received")
                     except Exception as exc:
                         print(f" Error ({label}, {variant_label}): {exc}")
                         continue
@@ -418,7 +423,7 @@ No explanations. No extra text.
 
                     tables = extract_markdown_tables(text)
                     if not tables:
-                        snippet = text.replace("\n", " ")[:200]
+                        snippet = text.replace("\\n", " ")[:200]
                         print(f" No tables found ({label}, {variant_label}): {snippet!r}")
                         continue
 
@@ -471,7 +476,7 @@ No explanations. No extra text.
             print(" All OCR attempts failed. Leaving Docling table unchanged.")
 
     final_md_path.write_text(markdown_content, encoding="utf-8")
-    print(f"\n✅ Final OCR-fixed markdown saved to: {final_md_path}")
+    print(f"\\n✅ Final OCR-fixed markdown saved to: {final_md_path}")
 
     final_html_path.write_text(html_content, encoding="utf-8")
     print(f"✅ Final OCR-fixed HTML saved to: {final_html_path}")
